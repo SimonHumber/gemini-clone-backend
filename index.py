@@ -11,6 +11,7 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
 socketio = SocketIO(app, cors_allowed_origins="*")
 CORS(app)
+messageHistory: list[dict[str, str | list[str]]] = []
 
 genai.configure(api_key=os.environ["API_KEY"])
 model = genai.GenerativeModel("gemini-1.5-flash")
@@ -18,7 +19,9 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 
 @socketio.on("message")
 def handle_message(prompt):
-    response = model.generate_content(prompt)
+    messageHistory.append({"role": "user", "parts": [prompt]})
+    response = model.generate_content(messageHistory)
+    messageHistory.append({"role": "model", "parts": [response.text]})
     emit("response", response.text)
 
 

@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import google.generativeai as genai
@@ -16,25 +16,10 @@ genai.configure(api_key=os.environ["API_KEY"])
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 
-@socketio.on("connect")
-def handle_connect():
-    print("Client connected")
-
-
-@socketio.on("disconnect")
-def handle_disconnect():
-    print("Client disconnected")
-
-
 @socketio.on("message")
-def handle_message(message):
-    response = model.generate_content(message)
+def handle_message(prompt):
+    response = model.generate_content(prompt)
     emit("response", response.text)
-
-
-@app.route("/open_socket", methods=["POST"])
-def open_socket():
-    return jsonify({"status": "WebSocket opened and listening on port 8080"})
 
 
 if __name__ == "__main__":

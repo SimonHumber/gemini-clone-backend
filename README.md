@@ -22,3 +22,6 @@ on Mac
 
 `python index.py`
 on other OS
+
+If you uploaded any files, they will be stored in gemini api for up to 2 days.
+You can delete them by running the `delete-files.py` script.

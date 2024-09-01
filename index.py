@@ -30,9 +30,9 @@ def handle_message(prompt):
     global file_location
     if prompt["hasFiles"]:
         files = genai.upload_file(path=file_location)
-        while files.state.name == "PROCESSING":
-            print("processing...")
-            time.sleep(10)
+        while genai.get_file(files.name).state.name == "PROCESSING":
+            print(genai.get_file(files.name).state.name)
+            time.sleep(1)
         if files.state.name == "FAILED":
             pass  # TODO throw exception maybe not necessary since it errors anyways
         prompt["parts"] = prompt["parts"] + [files]

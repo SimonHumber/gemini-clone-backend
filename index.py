@@ -15,7 +15,7 @@ socketio = SocketIO(app, cors_allowed_origins="http://localhost:3000")
 CORS(app)
 messageHistory: list[dict[str, str | list[str]]] = []
 app.config["UPLOAD_FOLDER"] = "uploads/"
-file_location: str = ""
+file_locations: list[str] = []
 
 
 genai.configure(api_key=os.environ["API_KEY"])
@@ -27,16 +27,20 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 @socketio.on("message")
 # TODO exception handling for when generate content fails
 def handle_message(prompt):
-    global file_location
+    global file_locations
     if prompt["hasFiles"]:
-        files = genai.upload_file(path=file_location)
-        while genai.get_file(files.name).state.name == "PROCESSING":
-            print(genai.get_file(files.name).state.name)
-            time.sleep(1)
-        if files.state.name == "FAILED":
-            pass  # TODO throw exception maybe not necessary since it errors anyways
-        prompt["parts"] = prompt["parts"] + [files]
-        file_location = ""
+        # should probably move all of this into another function
+        uploaded_files = []
+        for file in file_locations:
+            uploaded_file = genai.upload_file(path=file)
+            uploaded_files.append(uploaded_file)
+            while genai.get_file(uploaded_file.name).state.name == "PROCESSING":
+                print(genai.get_file(uploaded_file.name).state.name)
+                time.sleep(1)
+            if uploaded_file.state.name == "FAILED":
+                pass  # TODO throw exception maybe not necessary since it errors anyways
+        prompt["parts"] = prompt["parts"] + uploaded_files
+        file_locations = []
     prompt_api = {"role": "user", "parts": prompt["parts"]}
     messageHistory.append(prompt_api)
     response = model.generate_content(messageHistory)
@@ -54,11 +58,12 @@ def handle_upload():
         os.makedirs(app.config["UPLOAD_FOLDER"])
     else:
         os.makedirs(app.config["UPLOAD_FOLDER"])
-    global file_location
-    file = request.files["file"]
-    assert isinstance(file.filename, str)  # not necessary, just for lsp
-    file.save(os.path.join(app.config["UPLOAD_FOLDER"], file.filename))
-    file_location = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+    global file_locations
+    for file in request.files.getlist("file"):
+        assert isinstance(file.filename, str)  # not necessary, just for lsp
+        file_path = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+        file.save(file_path)
+        file_locations.append(file_path)
     return "File uploaded successfully", 200
 
 

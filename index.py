@@ -5,7 +5,7 @@ import google.generativeai as genai
 import os
 import shutil
 from dotenv import load_dotenv
-import PIL.Image
+import time
 
 
 load_dotenv()
@@ -15,7 +15,7 @@ socketio = SocketIO(app, cors_allowed_origins="http://localhost:3000")
 CORS(app)
 messageHistory: list[dict[str, str | list[str]]] = []
 app.config["UPLOAD_FOLDER"] = "uploads/"
-file_storage = None
+file_location: str = ""
 
 
 genai.configure(api_key=os.environ["API_KEY"])
@@ -25,16 +25,22 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 
 
 @socketio.on("message")
+# TODO exception handling for when generate content fails
 def handle_message(prompt):
-    global file_storage
+    global file_location
     if prompt["hasFiles"]:
-        prompt["parts"] = prompt["parts"] + [
-            PIL.Image.open("./uploads/" + file_storage.filename)
-        ]
-        file_storage = None
-    del prompt["hasFiles"]
-    messageHistory.append(prompt)
+        files = genai.upload_file(path=file_location)
+        while files.state.name == "PROCESSING":
+            print("processing...")
+            time.sleep(10)
+        if files.state.name == "FAILED":
+            pass  # TODO throw exception maybe not necessary since it errors anyways
+        prompt["parts"] = prompt["parts"] + [files]
+        file_location = ""
+    prompt_api = {"role": "user", "parts": prompt["parts"]}
+    messageHistory.append(prompt_api)
     response = model.generate_content(messageHistory)
+    print(response)
     messageHistory.append({"role": "model", "parts": [response.text]})
     """backend will send response event, frontend should listen to this"""
     emit("response", response.text)
@@ -48,10 +54,11 @@ def handle_upload():
         os.makedirs(app.config["UPLOAD_FOLDER"])
     else:
         os.makedirs(app.config["UPLOAD_FOLDER"])
-    global file_storage
+    global file_location
     file = request.files["file"]
+    assert isinstance(file.filename, str)  # not necessary, just for lsp
     file.save(os.path.join(app.config["UPLOAD_FOLDER"], file.filename))
-    file_storage = file
+    file_location = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
     return "File uploaded successfully", 200
 
 
